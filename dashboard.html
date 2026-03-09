@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dealer Outstanding Recovery Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Calibri,Arial,sans-serif;font-size:16px;background:#f0f4f8;min-height:100vh}
+
+/* ── LOADING ── */
+#loadingScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f2044,#1a56db);color:#fff;gap:20px}
+.spinner{width:52px;height:52px;border:5px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loadingScreen p{font-size:16px;opacity:.8}
+
+/* ── LOGIN ── */
+#loginScreen{display:none;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f2044 0%,#1a56db 100%);padding:16px}
+.login-card{background:#fff;border-radius:20px;padding:44px 40px;width:420px;max-width:100%;box-shadow:0 24px 80px rgba(0,0,0,.35);text-align:center}
+.login-logo{font-size:42px;margin-bottom:10px}
+.login-card h2{color:#0f2044;font-size:22px;font-weight:800;margin-bottom:4px}
+.login-sub{color:#64748b;font-size:14px;margin-bottom:20px}
+.date-pill{display:inline-block;background:#eff6ff;color:#1d4ed8;border-radius:20px;padding:5px 16px;font-size:13px;font-weight:700;margin-bottom:28px;border:1px solid #bfdbfe}
+.lf{text-align:left;margin-bottom:16px}
+.lf label{display:block;font-size:13px;color:#475569;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px}
+.lf input{width:100%;padding:12px 16px;border:2px solid #e2e8f0;border-radius:10px;font-size:16px;outline:none;transition:border .2s;background:#f8fafc}
+.lf input:focus{border-color:#1a56db;background:#fff}
+.login-btn{width:100%;padding:14px;background:linear-gradient(135deg,#1a56db,#0f2044);color:#fff;border:none;border-radius:10px;font-size:17px;font-weight:800;cursor:pointer;margin-top:8px;transition:opacity .2s}
+.login-btn:hover{opacity:.9}
+.login-err{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626;border-radius:8px;padding:10px 14px;font-size:14px;margin-top:14px;display:none}
+.powered{margin-top:24px;font-size:12px;color:#94a3b8}
+
+/* ── DASHBOARD ── */
+#dashboard{display:none}
+.topbar{background:linear-gradient(135deg,#0f2044 0%,#1a56db 100%);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,.25)}
+.topbar-title h1{font-size:19px;font-weight:800}
+.topbar-title p{font-size:13px;opacity:.8;margin-top:2px}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:5px 14px;font-size:13px;font-weight:600}
+.logout-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.35);color:#fff;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:13px;font-weight:700;transition:background .2s}
+.logout-btn:hover{background:rgba(255,255,255,.25)}
+
+.main{padding:20px 24px;max-width:1440px;margin:0 auto}
+
+/* ── KPI ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:20px}
+.kpi-card{background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 2px 12px rgba(0,0,0,.07);border-top:4px solid #1a56db;position:relative;overflow:hidden}
+.kpi-card.red{border-top-color:#dc2626}.kpi-card.orange{border-top-color:#f97316}.kpi-card.green{border-top-color:#10b981}.kpi-card.blue{border-top-color:#1a56db}
+.kpi-icon{font-size:28px;position:absolute;right:16px;top:16px;opacity:.15}
+.kpi-label{font-size:12px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.kpi-val{font-size:24px;font-weight:800;color:#0f2044;margin:6px 0 3px;line-height:1}
+.kpi-pct{font-size:13px;color:#94a3b8;font-weight:600}
+.kpi-card.red .kpi-val{color:#dc2626}
+
+/* ── ALERT ── */
+.alert-banner{background:linear-gradient(135deg,#fef2f2,#fff5f5);border:2px solid #fca5a5;border-radius:12px;padding:14px 20px;margin-bottom:20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.alert-icon{font-size:28px}
+.alert-text h3{color:#dc2626;font-size:16px;font-weight:800}
+.alert-text p{color:#7f1d1d;font-size:14px;margin-top:2px}
+.alert-stats{margin-left:auto;display:flex;gap:20px;flex-wrap:wrap}
+.alert-stat .val{font-size:20px;font-weight:800;color:#dc2626;text-align:center}
+.alert-stat .lbl{font-size:12px;color:#9f1239;font-weight:600;text-transform:uppercase;text-align:center}
+
+/* ── CHARTS ── */
+.panel-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.card{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,.07)}
+.card-title{font-size:15px;font-weight:800;color:#0f2044;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #f1f5f9}
+.chart-hint{font-size:11px;color:#94a3b8;font-weight:400;margin-left:6px}
+.chart-wrap{position:relative;height:240px}
+
+/* ── DEALER PANEL ── */
+.dealer-panel{background:linear-gradient(135deg,#eff6ff,#f0f9ff);border:2px solid #bfdbfe;border-radius:14px;padding:16px 20px;margin-bottom:20px;display:none}
+.dealer-panel h3{color:#1d4ed8;font-size:16px;font-weight:800;margin-bottom:12px}
+.dp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.dp-stat{background:#fff;border-radius:10px;padding:12px 14px;text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.06)}
+.dp-val{font-size:18px;font-weight:800;color:#0f2044}
+.dp-lbl{font-size:12px;color:#64748b;font-weight:600;margin-top:3px;text-transform:uppercase}
+.dp-close{float:right;background:#e2e8f0;border:none;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:13px;font-weight:700;color:#475569}
+.dp-close:hover{background:#cbd5e1}
+
+/* ── TABLE ── */
+.table-card{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,.07);margin-bottom:20px}
+.table-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.table-title{font-size:15px;font-weight:800;color:#0f2044;margin-right:auto}
+.ctrl-input{padding:9px 14px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;transition:border .2s}
+.ctrl-input:focus{border-color:#1a56db}
+select.ctrl-input{background:#fff;cursor:pointer}
+.filter-chip{display:inline-flex;align-items:center;gap:6px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:600}
+.filter-chip button{background:none;border:none;color:#1d4ed8;cursor:pointer;font-size:14px;line-height:1}
+.clear-btn{background:#f1f5f9;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:700;color:#475569}
+.clear-btn:hover{background:#e2e8f0}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:800px}
+thead th{background:#0f2044;color:#fff;padding:11px 12px;text-align:right;font-weight:700;cursor:pointer;white-space:nowrap;user-select:none}
+thead th:first-child,thead th:nth-child(2){text-align:left}
+thead th:hover{background:#1a56db}
+tbody td{padding:10px 12px;text-align:right;border-bottom:1px solid #f1f5f9;color:#334155}
+tbody td:first-child,tbody td:nth-child(2){text-align:left;font-weight:600}
+tbody tr:hover td{background:#f8fafc}
+tbody tr.cr td{color:#7f1d1d}
+tbody tr.cr td:first-child{border-left:4px solid #dc2626;background:#fff5f5}
+tbody tr.wa td{color:#713f12}
+tbody tr.wa td:first-child{border-left:4px solid #f97316;background:#fffbeb}
+tbody tr.ok td:first-child{border-left:4px solid #10b981}
+.badge{border-radius:12px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.badge.r{background:#fef2f2;color:#dc2626}.badge.o{background:#fff7ed;color:#c2410c}.badge.g{background:#f0fdf4;color:#15803d}
+.no-rows{text-align:center;padding:48px;color:#94a3b8;font-size:15px}
+
+/* ── PAGINATION ── */
+.pagination{display:flex;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap;gap:8px}
+.pag-info{font-size:13px;color:#64748b}
+.pag-btns{display:flex;gap:6px;flex-wrap:wrap}
+.pag-btn{padding:6px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;font-weight:600;color:#475569;transition:all .15s}
+.pag-btn:hover{background:#eff6ff;border-color:#93c5fd;color:#1d4ed8}
+.pag-btn.active{background:#1a56db;border-color:#1a56db;color:#fff}
+
+.footer{text-align:center;padding:16px;color:#94a3b8;font-size:12px}
+
+@media(max-width:768px){
+  .panel-row{grid-template-columns:1fr}
+  .main{padding:12px}
+  .kpi-val{font-size:20px}
+  .topbar-title h1{font-size:16px}
+  .alert-stats{margin-left:0}
+  .dp-grid{grid-template-columns:1fr 1fr}
+  table{font-size:13px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingScreen">
+  <div class="spinner"></div>
+  <p>Loading latest data…</p>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">🏦</div>
+    <h2>Dealer Outstanding Recovery</h2>
+    <div class="login-sub">Field Employee Dashboard</div>
+    <div class="date-pill" id="loginDate">📅 Loading…</div>
+    <div class="lf"><label>Employee ID</label><input type="text" id="empId" placeholder="e.g. EMP035" autocomplete="username"/></div>
+    <div class="lf"><label>Password</label><input type="password" id="empPwd" placeholder="Enter your password" autocomplete="current-password"/></div>
+    <button class="login-btn" id="loginBtn">🔐 Login to Dashboard</button>
+    <div class="login-err" id="loginErr">❌ Invalid Employee ID or Password</div>
+    <div class="powered">AR Aging Recovery System · Data refreshed daily</div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="topbar">
+    <div class="topbar-title">
+      <h1>🏦 Dealer Outstanding Recovery Dashboard</h1>
+      <p id="topSub">Loading…</p>
+    </div>
+    <div class="topbar-right">
+      <span class="pill" id="empPill">–</span>
+      <span class="pill" id="datePill">📅 –</span>
+      <button class="logout-btn" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="kpi-grid" id="kpiGrid"></div>
+    <div class="alert-banner" id="alertBanner" style="display:none">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-text">
+        <h3>Priority Recovery Required – Old Outstanding Pending</h3>
+        <p id="alertMsg"></p>
+      </div>
+      <div class="alert-stats" id="alertStats"></div>
+    </div>
+    <div class="panel-row">
+      <div class="card">
+        <div class="card-title">🍩 Aging Distribution<span class="chart-hint">Click segment to filter</span></div>
+        <div class="chart-wrap"><canvas id="donutChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📊 Dealer Risk — Top Outstanding<span class="chart-hint">Click bar to drill down</span></div>
+        <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+      </div>
+    </div>
+    <div class="dealer-panel" id="dealerPanel">
+      <button class="dp-close" id="dpClose">✕ Close</button>
+      <h3 id="dpTitle">Dealer Summary</h3>
+      <div class="dp-grid" id="dpGrid"></div>
+    </div>
+    <div class="table-card">
+      <div class="table-controls">
+        <span class="table-title">📋 Dealer Recovery Tracker</span>
+        <input type="text" class="ctrl-input" id="searchBox" placeholder="🔍 Search dealer…" style="width:200px"/>
+        <select class="ctrl-input" id="agingFilter">
+          <option value="">All Aging</option>
+          <option value="b1">&lt;180 Days</option>
+          <option value="b2">180–365 Days</option>
+          <option value="b3">&gt;365 Days</option>
+        </select>
+        <select class="ctrl-input" id="orgFilter"><option value="">All States</option></select>
+        <button class="clear-btn" id="clearFilters">✕ Clear</button>
+      </div>
+      <div id="activeFilters" style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th data-col="0">Code ⇅</th>
+            <th data-col="1">Dealer Name ⇅</th>
+            <th data-col="2">State ⇅</th>
+            <th data-col="3">&lt;180 Days ⇅</th>
+            <th data-col="4">180–365 Days ⇅</th>
+            <th data-col="5">&gt;365 Days ⇅</th>
+            <th data-col="6">Total Outstanding ⇅</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody id="tBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <div class="pag-info" id="pagInfo"></div>
+        <div class="pag-btns" id="pagBtns"></div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">Data as on <strong id="footerDate">–</strong> &nbsp;|&nbsp; Dealer Outstanding Recovery Dashboard &nbsp;|&nbsp; 🔒 Confidential</div>
+</div>
+
+<script>
+var D = null;
+var currentEid = null;
+var myRows = [];
+var filteredRows = [];
+var sortCol = 6, sortAsc = false;
+var page = 1, pageSize = 15;
+var filterAging = '', filterOrg = '', filterDealer = '';
+var donutObj = null, barObj = null;
+
+var INR = function(n){ return n ? '₹'+Number(n).toLocaleString('en-IN',{maximumFractionDigits:0}) : '–'; };
+var PCT = function(a,b){ return b>0?(a/b*100).toFixed(1)+'%':'0%'; };
+
+// ── LOAD data.json on startup
+fetch('data.json?v=' + Date.now())
+  .then(function(r){ return r.json(); })
+  .then(function(json){
+    D = json;
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginDate').textContent = '📅 Data as on ' + D.asOn;
+    document.getElementById('datePill').textContent = '📅 ' + D.asOn;
+    document.getElementById('footerDate').textContent = D.asOn;
+  })
+  .catch(function(e){
+    document.getElementById('loadingScreen').innerHTML =
+      '<div style="text-align:center;color:#fff;padding:40px">'+
+      '<div style="font-size:48px">⚠️</div>'+
+      '<h2 style="margin:16px 0 8px">Could not load data.json</h2>'+
+      '<p style="opacity:.8;font-size:15px">Make sure data.json is in the same folder as this HTML file.<br>'+
+      'If hosting on GitHub Pages, ensure both files are committed.</p></div>';
+  });
+
+// ── LOGIN
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('empPwd').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+document.getElementById('empId').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('empPwd').focus(); });
+
+function doLogin(){
+  var id = document.getElementById('empId').value.trim().toUpperCase();
+  var pw = document.getElementById('empPwd').value.trim();
+  var cred = D && D.creds[id];
+  if(cred && cred.password === pw){
+    document.getElementById('loginErr').style.display='none';
+    currentEid = id;
+    myRows = D.rows.filter(function(r){ return r[0]===id; });
+    renderDashboard();
+  } else {
+    document.getElementById('loginErr').style.display='block';
+  }
+}
+
+document.getElementById('logoutBtn').addEventListener('click', function(){
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('empId').value='';
+  document.getElementById('empPwd').value='';
+  currentEid=null; myRows=[];
+  if(donutObj){donutObj.destroy();donutObj=null;}
+  if(barObj){barObj.destroy();barObj=null;}
+  document.getElementById('dealerPanel').style.display='none';
+  filterAging=''; filterOrg=''; filterDealer='';
+});
+
+function renderDashboard(){
+  var cred = D.creds[currentEid];
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('empPill').textContent='👤 '+cred.name;
+  document.getElementById('topSub').textContent='Week Ending: '+D.asOn+' · '+myRows.length+' Dealers Assigned';
+
+  var tot=0,b1=0,b2=0,b3=0;
+  myRows.forEach(function(r){ b1+=r[4]; b2+=r[5]; b3+=r[6]; tot+=r[7]; });
+
+  document.getElementById('kpiGrid').innerHTML=[
+    {label:'Total Outstanding',val:INR(tot),pct:myRows.length+' dealers assigned',cls:'blue',icon:'💰'},
+    {label:'< 180 Days',val:INR(b1),pct:PCT(b1,tot)+' of total',cls:'green',icon:'🟢'},
+    {label:'180–365 Days',val:INR(b2),pct:PCT(b2,tot)+' of total',cls:'orange',icon:'🟡'},
+    {label:'> 365 Days  ⚠',val:INR(b3),pct:PCT(b3,tot)+' of total',cls:'red',icon:'🔴'}
+  ].map(function(k){
+    return '<div class="kpi-card '+k.cls+'"><span class="kpi-icon">'+k.icon+'</span>'+
+      '<div class="kpi-label">'+k.label+'</div><div class="kpi-val">'+k.val+'</div>'+
+      '<div class="kpi-pct">'+k.pct+'</div></div>';
+  }).join('');
+
+  var critDealers = myRows.filter(function(r){return r[6]>0;});
+  if(b3>0){
+    document.getElementById('alertBanner').style.display='flex';
+    document.getElementById('alertMsg').textContent=critDealers.length+' dealers have outstanding beyond 365 days — urgent follow-up required';
+    document.getElementById('alertStats').innerHTML=
+      '<div class="alert-stat"><div class="val">'+critDealers.length+'</div><div class="lbl">Critical Dealers</div></div>'+
+      '<div class="alert-stat"><div class="val">'+INR(b3)+'</div><div class="lbl">>365 Days Amount</div></div>'+
+      '<div class="alert-stat"><div class="val">'+PCT(b3,tot)+'</div><div class="lbl">% of Total</div></div>';
+  } else {
+    document.getElementById('alertBanner').style.display='none';
+  }
+
+  var orgs = [...new Set(myRows.map(function(r){return r[1];}))].sort();
+  var orgSel = document.getElementById('orgFilter');
+  orgSel.innerHTML='<option value="">All States</option>';
+  orgs.forEach(function(o){ orgSel.innerHTML+='<option value="'+o+'">'+o+'</option>'; });
+
+  renderDonut(b1,b2,b3);
+  renderBar();
+  sortCol=6; sortAsc=false;
+  applyFiltersAndRender();
+}
+
+function renderDonut(b1,b2,b3){
+  if(donutObj){donutObj.destroy();}
+  donutObj=new Chart(document.getElementById('donutChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:['< 180 Days','180–365 Days','> 365 Days'],
+      datasets:[{data:[b1,b2,b3],backgroundColor:['#10b981','#f97316','#dc2626'],borderWidth:3,borderColor:'#fff',hoverOffset:8}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{font:{size:13},padding:16}},
+        tooltip:{callbacks:{label:function(c){return ' '+INR(c.raw)+' ('+PCT(c.raw,b1+b2+b3)+')';}}}},
+      onClick:function(evt,el){
+        if(el.length){ filterAging=['b1','b2','b3'][el[0].index]; document.getElementById('agingFilter').value=filterAging; page=1; applyFiltersAndRender(); }
+      }}
+  });
+}
+
+function renderBar(){
+  if(barObj){barObj.destroy();}
+  var sorted=myRows.slice().sort(function(a,b){return b[7]-a[7];}).slice(0,15);
+  barObj=new Chart(document.getElementById('barChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:sorted.map(function(r){var n=r[3];return n.length>16?n.substr(0,14)+'…':n;}),
+      datasets:[
+        {label:'> 365 Days',data:sorted.map(function(r){return r[6];}),backgroundColor:'#dc2626',borderRadius:4},
+        {label:'180–365 Days',data:sorted.map(function(r){return r[5];}),backgroundColor:'#f97316',borderRadius:4},
+        {label:'< 180 Days',data:sorted.map(function(r){return r[4];}),backgroundColor:'#10b981',borderRadius:4}
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',
+      plugins:{legend:{position:'top',labels:{font:{size:12}}},
+        tooltip:{callbacks:{label:function(c){return ' '+c.dataset.label+': '+INR(c.raw);}}}},
+      scales:{x:{stacked:true,ticks:{callback:function(v){return '₹'+Number(v/100000).toFixed(0)+'L';}}},y:{stacked:true,ticks:{font:{size:11}}}},
+      onClick:function(evt,el){
+        if(el.length){ var row=sorted[el[0].index]; filterDealer=row[3]; page=1; applyFiltersAndRender(); showDealerPanel(row); }
+      }}
+  });
+}
+
+function showDealerPanel(row){
+  document.getElementById('dealerPanel').style.display='block';
+  document.getElementById('dpTitle').textContent='📌 '+row[3]+' ('+row[1]+' · '+row[2]+')';
+  document.getElementById('dpGrid').innerHTML=[
+    {v:INR(row[7]),l:'Total Outstanding'},{v:INR(row[4]),l:'< 180 Days'},
+    {v:INR(row[5]),l:'180–365 Days'},{v:INR(row[6]),l:'> 365 Days'},
+    {v:row[1],l:'State / Org'},{v:row[2],l:'Dealer Code'}
+  ].map(function(s){return '<div class="dp-stat"><div class="dp-val">'+s.v+'</div><div class="dp-lbl">'+s.l+'</div></div>';}).join('');
+  document.getElementById('dpClose').onclick=function(){
+    document.getElementById('dealerPanel').style.display='none';
+    filterDealer=''; page=1; applyFiltersAndRender();
+  };
+  document.getElementById('dealerPanel').scrollIntoView({behavior:'smooth'});
+}
+
+function applyFiltersAndRender(){
+  var q=document.getElementById('searchBox').value.toLowerCase();
+  filteredRows=myRows.filter(function(r){
+    var mq=!q||(r[3].toLowerCase().includes(q)||r[2].toLowerCase().includes(q)||r[1].toLowerCase().includes(q));
+    var ma=!filterAging||(filterAging==='b1'?r[4]>0:filterAging==='b2'?r[5]>0:r[6]>0);
+    var mo=!filterOrg||r[1]===filterOrg;
+    var md=!filterDealer||r[3]===filterDealer;
+    return mq&&ma&&mo&&md;
+  });
+  filteredRows.sort(function(a,b){
+    var av=[a[2],a[3],a[1],a[4],a[5],a[6],a[7]][sortCol];
+    var bv=[b[2],b[3],b[1],b[4],b[5],b[6],b[7]][sortCol];
+    if(typeof av==='string') return sortAsc?av.localeCompare(bv):bv.localeCompare(av);
+    return sortAsc?av-bv:bv-av;
+  });
+  renderActiveFilters();
+  renderTable();
+  renderPagination();
+}
+
+function renderActiveFilters(){
+  var af=document.getElementById('activeFilters');
+  af.innerHTML='';
+  var chips=[];
+  if(filterAging) chips.push({label:filterAging==='b1'?'< 180 Days':filterAging==='b2'?'180–365 Days':'> 365 Days',clr:function(){filterAging='';document.getElementById('agingFilter').value='';page=1;applyFiltersAndRender();}});
+  if(filterOrg) chips.push({label:'State: '+filterOrg,clr:function(){filterOrg='';document.getElementById('orgFilter').value='';page=1;applyFiltersAndRender();}});
+  if(filterDealer) chips.push({label:'Dealer: '+filterDealer.substr(0,20),clr:function(){filterDealer='';page=1;applyFiltersAndRender();}});
+  chips.forEach(function(c){
+    var el=document.createElement('span');
+    el.className='filter-chip';
+    el.innerHTML=c.label+' <button>✕</button>';
+    el.querySelector('button').addEventListener('click',c.clr);
+    af.appendChild(el);
+  });
+}
+
+function renderTable(){
+  var start=(page-1)*pageSize, end=start+pageSize;
+  var rows=filteredRows.slice(start,end);
+  if(!rows.length){
+    document.getElementById('tBody').innerHTML='<tr><td colspan="8" class="no-rows">No dealers found.</td></tr>';
+    return;
+  }
+  document.getElementById('tBody').innerHTML=rows.map(function(r){
+    var isCrit=r[6]>0, isWarn=r[5]>0&&!isCrit;
+    var cls=isCrit?'cr':isWarn?'wa':'ok';
+    var badge=isCrit?'<span class="badge r">🔴 >365 Days</span>':isWarn?'<span class="badge o">🟡 180–365</span>':'<span class="badge g">🟢 <180 Days</span>';
+    return '<tr class="'+cls+'" data-name="'+r[3].replace(/"/g,'&quot;')+'">'+
+      '<td>'+r[2]+'</td>'+
+      '<td style="cursor:pointer;text-decoration:underline dotted" title="Click for summary">'+r[3]+'</td>'+
+      '<td>'+r[1]+'</td>'+
+      '<td>'+(r[4]?INR(r[4]):'–')+'</td>'+
+      '<td style="'+(r[5]?'color:#c2410c;font-weight:700':'')+'">'+INR(r[5])+'</td>'+
+      '<td style="'+(r[6]?'color:#dc2626;font-weight:800':'')+'">'+INR(r[6])+'</td>'+
+      '<td><strong>'+INR(r[7])+'</strong></td>'+
+      '<td>'+badge+'</td></tr>';
+  }).join('');
+  document.querySelectorAll('#tBody tr[data-name]').forEach(function(tr){
+    tr.querySelector('td:nth-child(2)').addEventListener('click',function(){
+      var row=myRows.find(function(r){return r[3]===tr.dataset.name;});
+      if(row) showDealerPanel(row);
+    });
+  });
+}
+
+function renderPagination(){
+  var total=filteredRows.length, pages=Math.max(1,Math.ceil(total/pageSize));
+  if(page>pages) page=pages;
+  var s=(page-1)*pageSize+1, e=Math.min(page*pageSize,total);
+  document.getElementById('pagInfo').textContent='Showing '+s+'–'+e+' of '+total+' dealers';
+  var lo=Math.max(1,page-2), hi=Math.min(pages,page+2), btns='';
+  btns+='<button class="pag-btn" id="pb_prev"'+(page===1?' disabled':'')+'>◀ Prev</button>';
+  if(lo>1) btns+='<button class="pag-btn" data-p="1">1</button>'+(lo>2?'<span style="padding:6px 4px;color:#94a3b8">…</span>':'');
+  for(var p=lo;p<=hi;p++) btns+='<button class="pag-btn'+(p===page?' active':'')+'" data-p="'+p+'">'+p+'</button>';
+  if(hi<pages) btns+=(hi<pages-1?'<span style="padding:6px 4px;color:#94a3b8">…</span>':'')+'<button class="pag-btn" data-p="'+pages+'">'+pages+'</button>';
+  btns+='<button class="pag-btn" id="pb_next"'+(page===pages?' disabled':'')+'>Next ▶</button>';
+  var pb=document.getElementById('pagBtns');
+  pb.innerHTML=btns;
+  pb.querySelectorAll('[data-p]').forEach(function(b){ b.addEventListener('click',function(){ page=parseInt(this.dataset.p); renderTable(); renderPagination(); }); });
+  var pv=pb.querySelector('#pb_prev'), nx=pb.querySelector('#pb_next');
+  if(pv&&!pv.disabled) pv.addEventListener('click',function(){ page--; renderTable(); renderPagination(); });
+  if(nx&&!nx.disabled) nx.addEventListener('click',function(){ page++; renderTable(); renderPagination(); });
+}
+
+document.querySelectorAll('thead th[data-col]').forEach(function(th){
+  th.addEventListener('click',function(){
+    var c=parseInt(this.dataset.col);
+    if(sortCol===c) sortAsc=!sortAsc; else{sortCol=c;sortAsc=false;}
+    page=1; applyFiltersAndRender();
+  });
+});
+document.getElementById('searchBox').addEventListener('input',function(){ page=1; applyFiltersAndRender(); });
+document.getElementById('agingFilter').addEventListener('change',function(){ filterAging=this.value; page=1; applyFiltersAndRender(); });
+document.getElementById('orgFilter').addEventListener('change',function(){ filterOrg=this.value; page=1; applyFiltersAndRender(); });
+document.getElementById('clearFilters').addEventListener('click',function(){
+  filterAging=''; filterOrg=''; filterDealer='';
+  document.getElementById('searchBox').value='';
+  document.getElementById('agingFilter').value='';
+  document.getElementById('orgFilter').value='';
+  document.getElementById('dealerPanel').style.display='none';
+  page=1; sortCol=6; sortAsc=false; applyFiltersAndRender();
+});
+</script>
+</body>
+</html>
